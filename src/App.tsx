@@ -1,51 +1,46 @@
-import { useEffect, useRef, useState } from 'react'
-import { normalizeClothImage } from './lib/normalizeImage'
+import { useRef, useState } from 'react'
+import { FILE_ACCEPT, normalizeClothImage } from './lib/normalizeImage'
 import './App.css'
 
-type Background = {
-  id: string
-  file: string
-  url: string
-}
-
 type Status = 'idle' | 'loading' | 'done' | 'error'
+type BackgroundMode = 'photo' | 'prompt'
 
 const MAX_BYTES = 20 * 1024 * 1024
 
 export default function App() {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [backgrounds, setBackgrounds] = useState<Background[]>([])
+  const clothInputRef = useRef<HTMLInputElement>(null)
+  const backgroundInputRef = useRef<HTMLInputElement>(null)
+
   const [clothPreview, setClothPreview] = useState<string | null>(null)
   const [clothDataUrl, setClothDataUrl] = useState<string | null>(null)
-  const [backgroundId, setBackgroundId] = useState<string | null>(null)
+  const [clothName, setClothName] = useState<string | null>(null)
+
+  const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('photo')
+  const [backgroundDataUrl, setBackgroundDataUrl] = useState<string | null>(null)
+  const [backgroundName, setBackgroundName] = useState<string | null>(null)
+  const [backgroundPrompt, setBackgroundPrompt] = useState('')
+
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>('idle')
-  const [converting, setConverting] = useState(false)
+  const [converting, setConverting] = useState<'cloth' | 'background' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    fetch('/Background/manifest.json')
-      .then((res) => {
-        if (!res.ok) throw new Error('Could not load backgrounds.')
-        return res.json() as Promise<Background[]>
-      })
-      .then((items) => {
-        if (cancelled) return
-        setBackgrounds(items)
-        if (items[0]) setBackgroundId(items[0].id)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load backgrounds.')
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  function clearBackgroundFile() {
+    setBackgroundDataUrl(null)
+    setBackgroundName(null)
+    if (backgroundInputRef.current) backgroundInputRef.current.value = ''
+  }
 
-  async function onClothSelected(file: File | undefined) {
+  function selectMode(mode: BackgroundMode) {
+    setBackgroundMode(mode)
+    setError(null)
+    setResultUrl(null)
+    setStatus('idle')
+    if (mode !== 'photo') clearBackgroundFile()
+    if (mode !== 'prompt') setBackgroundPrompt('')
+  }
+
+  async function prepareImage(file: File | undefined, kind: 'cloth' | 'background') {
     if (!file) return
     setError(null)
     setResultUrl(null)
@@ -57,22 +52,36 @@ export default function App() {
     }
 
     try {
-      setConverting(true)
+      setConverting(kind)
       const dataUrl = await normalizeClothImage(file)
-      setClothPreview(dataUrl)
-      setClothDataUrl(dataUrl)
+      if (kind === 'cloth') {
+        setClothPreview(dataUrl)
+        setClothDataUrl(dataUrl)
+        setClothName(file.name)
+      } else {
+        setBackgroundDataUrl(dataUrl)
+        setBackgroundName(file.name)
+      }
       setStatus('idle')
     } catch (err) {
       setStatus('error')
       setError(err instanceof Error ? err.message : 'Could not read that photo.')
     } finally {
-      setConverting(false)
+      setConverting(null)
     }
   }
 
   async function generate() {
-    if (!clothDataUrl || !backgroundId) {
-      setError('Upload a cloth photo and choose a background first.')
+    if (!clothDataUrl) {
+      setError('Browse and select a cloth photo first.')
+      return
+    }
+    if (backgroundMode === 'photo' && !backgroundDataUrl) {
+      setError('Browse a background photo, or choose another background option.')
+      return
+    }
+    if (backgroundMode === 'prompt' && !backgroundPrompt.trim()) {
+      setError('Describe the background in the prompt box, or choose another option.')
       return
     }
 
@@ -84,7 +93,12 @@ export default function App() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clothDataUrl, backgroundId }),
+        body: JSON.stringify({
+          clothDataUrl,
+          backgroundMode,
+          backgroundDataUrl: backgroundMode === 'photo' ? backgroundDataUrl : null,
+          backgroundPrompt: backgroundMode === 'prompt' ? backgroundPrompt.trim() : null,
+        }),
       })
       const payload = (await res.json()) as { imageDataUrl?: string; error?: string }
       if (!res.ok || !payload.imageDataUrl) {
@@ -98,8 +112,11 @@ export default function App() {
     }
   }
 
-  const canGenerate =
-    Boolean(clothDataUrl && backgroundId) && status !== 'loading' && !converting
+  const busy = status === 'loading' || converting !== null
+  const backgroundReady =
+    (backgroundMode === 'photo' && Boolean(backgroundDataUrl)) ||
+    (backgroundMode === 'prompt' && Boolean(backgroundPrompt.trim()))
+  const canGenerate = Boolean(clothDataUrl) && backgroundReady && !busy
 
   return (
     <div className="page">
@@ -107,101 +124,179 @@ export default function App() {
         <p className="eyebrow">Cloth → model photoshoot</p>
         <h1 className="brand">Modellr</h1>
         <p className="tagline">
-          Upload a raw garment photo, pick a background, and generate a model wearing it.
+          Browse a garment, then choose a background photo or describe one with a prompt.
         </p>
       </header>
 
       <section className="workspace" aria-label="Generate model photo">
-        <div className="panel upload-panel">
-          <div className="panel-head">
-            <h2>1. Cloth photo</h2>
-            <p>JPG, PNG, WebP, HEIC, AVIF, and similar — front-facing shots work best.</p>
-          </div>
+        <div className="controls">
+          <div className="panel">
+            <div className="panel-head">
+              <h2>1. Cloth photo</h2>
+              <p>Browse any format — JPG, PNG, WebP, HEIC, AVIF.</p>
+            </div>
 
-          <button
-            type="button"
-            className={`dropzone ${clothPreview ? 'has-file' : ''}`}
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault()
-              void onClothSelected(e.dataTransfer.files[0])
-            }}
-          >
-            {clothPreview ? (
-              <img src={clothPreview} alt="Uploaded cloth" className="cloth-preview" />
-            ) : converting ? (
-              <span className="dropzone-copy">
-                <strong>Preparing photo…</strong>
-                <span>Converting HEIC and other formats</span>
-              </span>
-            ) : (
-              <span className="dropzone-copy">
-                <strong>Drop cloth photo here</strong>
-                <span>JPG, PNG, WebP, HEIC, AVIF…</span>
-              </span>
-            )}
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*,.heic,.heif,.HEIC,.HEIF"
-            className="sr-only"
-            onChange={(e) => void onClothSelected(e.target.files?.[0])}
-          />
-          {clothPreview && (
             <button
               type="button"
-              className="text-btn"
-              onClick={() => {
-                setClothPreview(null)
-                setClothDataUrl(null)
-                setResultUrl(null)
-                setStatus('idle')
-                if (inputRef.current) inputRef.current.value = ''
+              className={`dropzone ${clothPreview ? 'has-file' : ''}`}
+              onClick={() => clothInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault()
+                void prepareImage(e.dataTransfer.files[0], 'cloth')
               }}
             >
-              Remove photo
+              {clothPreview ? (
+                <img src={clothPreview} alt="Uploaded cloth" className="cloth-preview" />
+              ) : converting === 'cloth' ? (
+                <span className="dropzone-copy">
+                  <strong>Preparing photo…</strong>
+                  <span>Converting if needed</span>
+                </span>
+              ) : (
+                <span className="dropzone-copy">
+                  <strong>Browse cloth photo</strong>
+                  <span>Tap or drop a garment image</span>
+                </span>
+              )}
             </button>
-          )}
-        </div>
-
-        <div className="panel bg-panel">
-          <div className="panel-head">
-            <h2>2. Background</h2>
-            <p>Choose a photoshoot scene from your Background folder.</p>
+            <input
+              ref={clothInputRef}
+              type="file"
+              accept={FILE_ACCEPT}
+              className="sr-only"
+              onChange={(e) => void prepareImage(e.target.files?.[0], 'cloth')}
+            />
+            {clothName && (
+              <div className="file-meta">
+                <span className="file-name" title={clothName}>
+                  {clothName}
+                </span>
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() => {
+                    setClothPreview(null)
+                    setClothDataUrl(null)
+                    setClothName(null)
+                    setResultUrl(null)
+                    setStatus('idle')
+                    if (clothInputRef.current) clothInputRef.current.value = ''
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
           </div>
-          <div className="bg-grid" role="listbox" aria-label="Background options">
-            {backgrounds.map((bg) => (
+
+          <div className="panel">
+            <div className="panel-head">
+              <h2>2. Background</h2>
+              <p>Choose how the photoshoot scene should be created.</p>
+            </div>
+
+            <div className="mode-row" role="radiogroup" aria-label="Background mode">
               <button
-                key={bg.id}
                 type="button"
-                role="option"
-                aria-selected={backgroundId === bg.id}
-                className={`bg-tile ${backgroundId === bg.id ? 'selected' : ''}`}
-                onClick={() => setBackgroundId(bg.id)}
+                role="radio"
+                aria-checked={backgroundMode === 'photo'}
+                className={`mode-btn ${backgroundMode === 'photo' ? 'active' : ''}`}
+                onClick={() => selectMode('photo')}
               >
-                <img src={bg.url} alt={bg.id} />
-                <span>{bg.id}</span>
+                With background photo
               </button>
-            ))}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={backgroundMode === 'prompt'}
+                className={`mode-btn ${backgroundMode === 'prompt' ? 'active' : ''}`}
+                onClick={() => selectMode('prompt')}
+              >
+                Random / prompt background
+              </button>
+            </div>
+
+            {backgroundMode === 'photo' && (
+              <>
+                <button
+                  type="button"
+                  className={`browse-btn ${backgroundDataUrl ? 'selected' : ''}`}
+                  onClick={() => backgroundInputRef.current?.click()}
+                  disabled={converting === 'background'}
+                >
+                  {converting === 'background'
+                    ? 'Preparing background…'
+                    : backgroundName
+                      ? 'Change background photo'
+                      : 'Browse background from folder'}
+                </button>
+                <input
+                  ref={backgroundInputRef}
+                  type="file"
+                  accept={FILE_ACCEPT}
+                  className="sr-only"
+                  onChange={(e) => void prepareImage(e.target.files?.[0], 'background')}
+                />
+                {backgroundName ? (
+                  <div className="file-meta">
+                    <span className="file-name" title={backgroundName}>
+                      Selected: {backgroundName}
+                    </span>
+                    <button type="button" className="text-btn" onClick={clearBackgroundFile}>
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <p className="helper">Background image is not previewed here — only the file name.</p>
+                )}
+              </>
+            )}
+
+            {backgroundMode === 'prompt' && (
+              <>
+                <label className="prompt-label" htmlFor="bg-prompt">
+                  Describe the background
+                </label>
+                <textarea
+                  id="bg-prompt"
+                  className="prompt-input"
+                  rows={3}
+                  placeholder="e.g. sunny marble courtyard with soft daylight and greenery"
+                  value={backgroundPrompt}
+                  onChange={(e) => {
+                    setBackgroundPrompt(e.target.value)
+                    setResultUrl(null)
+                    setStatus('idle')
+                  }}
+                />
+                <p className="helper">OpenAI will invent a matching photoshoot scene from your text.</p>
+              </>
+            )}
+          </div>
+
+          <div className="panel actions-panel">
+            <button type="button" className="generate-btn" disabled={!canGenerate} onClick={() => void generate()}>
+              {status === 'loading' ? 'Generating…' : 'Generate model photo'}
+            </button>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
           </div>
         </div>
 
         <div className="panel result-panel">
           <div className="panel-head">
             <h2>3. Model photo</h2>
-            <p>AI places your garment on a real model in the selected scene.</p>
+            <p>OpenAI places your garment on a real model using the background option you chose.</p>
           </div>
 
-          <button type="button" className="generate-btn" disabled={!canGenerate} onClick={() => void generate()}>
-            {status === 'loading' ? 'Generating…' : 'Generate model photo'}
-          </button>
-
-          {error && <p className="error" role="alert">{error}</p>}
-
           <div className={`result-frame ${resultUrl ? 'ready' : ''}`}>
-            {status === 'loading' && <p className="result-placeholder">Creating your photoshoot…</p>}
+            {status === 'loading' && (
+              <p className="result-placeholder">Generating with OpenAI… this can take a moment.</p>
+            )}
             {resultUrl && (
               <>
                 <img src={resultUrl} alt="Generated model wearing the garment" />
@@ -211,7 +306,7 @@ export default function App() {
               </>
             )}
             {status !== 'loading' && !resultUrl && (
-              <p className="result-placeholder">Your generated photo will appear here.</p>
+              <p className="result-placeholder">Result will show after you generate.</p>
             )}
           </div>
         </div>

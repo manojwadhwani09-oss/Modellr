@@ -1,48 +1,80 @@
 # Modellr
 
-Turn a raw cloth / garment photo into a model photoshoot image.
+Cloth → model photoshoot app.
 
-## Run
+**Architecture (deployable):**
+- Frontend: Vite + React
+- API: Express (`/api/generate`) calling OpenAI Images (`gpt-image-1`)
+
+## Setup
 
 ```bash
 cd /Users/manojwadhwani/IdeaProjects/Modellr
 npm install
+cp .env.example .env
 ```
 
-1. Copy `.env.example` to `.env`
-2. Add your Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
-3. Start the app:
+Add your key to `.env`:
+
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+Get a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys) (billing required).
+
+## Local development
 
 ```bash
 npm run dev
 ```
 
-Open the Local URL (usually `http://localhost:5173`).
+- Web: http://localhost:5173  
+- API: http://localhost:3001  
+
+Vite proxies `/api/*` to the API server.
+
+## Production deploy
+
+```bash
+npm run build
+npm start
+```
+
+This serves the built frontend and API from one process on `PORT` (default `3001`).
+
+### Deploy on Render
+
+1. Push this repo to GitHub (do **not** commit `.env`)
+2. Go to [https://dashboard.render.com](https://dashboard.render.com) → **New** → **Web Service**
+3. Connect the GitHub repo
+4. Settings:
+   - **Runtime:** Node
+   - **Build Command:** `npm install --include=dev && npm run build`
+   - **Start Command:** `npm start`
+5. Environment variables:
+   - `OPENAI_API_KEY` = your secret key (required)
+   - Optional: `OPENAI_IMAGE_MODEL=gpt-image-1`
+6. Create Web Service and wait for deploy
+
+Or use the included `render.yaml`: **New** → **Blueprint** → select the repo.
+
+Your app URL will look like `https://modellr.onrender.com`.
+
+**Notes**
+- Free Render instances sleep after idle; first request can be slow
+- Keep the API key only in Render Environment (never in git)
+- OpenAI image calls need billing enabled on your OpenAI account
+
+Deploy on any Node host (Railway, Fly.io, VPS, etc.):
+
+1. Set `OPENAI_API_KEY` in the host environment  
+2. `npm install --include=dev`  
+3. `npm run build`  
+4. `npm start`
 
 ## How to use
 
-1. **Cloth photo** — upload a front-facing garment / mannequin shot  
-2. **Background** — pick a scene from `public/Background`  
-3. **Generate** — create a model wearing that garment in the selected scene  
-4. **Download** the result
-
-## Backgrounds
-
-Put JPG backgrounds in:
-
-`public/Background/`
-
-Then update `public/Background/manifest.json` (or regenerate it) so they appear in the UI.
-
-## Scripts
-
-```bash
-npm run dev      # start local dev server (includes /api/generate)
-npm run build    # production build
-npm run preview  # preview production build
-npm run lint     # run oxlint
-```
-
-## Note
-
-Image generation uses the Gemini API (`gemini-2.5-flash-image`) via `/api/generate` in the Vite dev server. Keep `GEMINI_API_KEY` in `.env` only — never commit it.
+1. Browse a cloth / garment photo (HEIC supported)  
+2. Browse a background photo (not shown on the page)  
+3. Generate with OpenAI  
+4. Download the result
