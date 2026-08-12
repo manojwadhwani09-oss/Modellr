@@ -15,4 +15,4 @@ services:
       - key: OPENAI_IMAGE_SIZE
         value: 1024x1536
       - key: OPENAI_IMAGE_QUALITY
-        value: medium
+        value: low

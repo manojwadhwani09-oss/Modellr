@@ -93,7 +93,7 @@ export async function generateWithOpenAI(
     | '1024x1536'
     | '1536x1024'
     | 'auto'
-  const quality = (process.env.OPENAI_IMAGE_QUALITY?.trim() || 'medium') as
+  const quality = (process.env.OPENAI_IMAGE_QUALITY?.trim() || 'low') as
     | 'low'
     | 'medium'
     | 'high'
