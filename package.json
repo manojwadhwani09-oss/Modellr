@@ -9,6 +9,8 @@
     "dev:api": "tsx watch server/index.ts",
     "build": "tsc -b && vite build",
     "start": "tsx server/index.ts",
+    "docker:build": "docker build -t modellr .",
+    "docker:up": "docker compose up --build",
     "lint": "oxlint",
     "preview": "vite preview"
   },

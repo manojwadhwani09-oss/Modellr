@@ -33,7 +33,38 @@ npm run dev
 
 Vite proxies `/api/*` to the API server.
 
-## Production deploy
+## Docker
+
+### Build & run locally
+
+```bash
+# from project root (OPENAI_API_KEY must be in your shell or .env for compose)
+export OPENAI_API_KEY=sk-...
+
+docker compose up --build
+```
+
+Open http://localhost:3001
+
+Or without Compose:
+
+```bash
+docker build -t modellr .
+docker run --rm -p 3001:3001 -e OPENAI_API_KEY=sk-... modellr
+```
+
+### Deploy Docker on Render
+
+1. Push Dockerfile + code to GitHub
+2. Render → **New** → **Web Service**
+3. Connect repo
+4. Runtime: **Docker**
+5. Set env `OPENAI_API_KEY`
+6. Deploy
+
+Or use Blueprint with the repo `render.yaml` (Docker runtime).
+
+## Production deploy (Node, no Docker)
 
 ```bash
 npm run build
@@ -42,7 +73,7 @@ npm start
 
 This serves the built frontend and API from one process on `PORT` (default `3001`).
 
-### Deploy on Render
+### Deploy on Render (Node)
 
 1. Push this repo to GitHub (do **not** commit `.env`)
 2. Go to [https://dashboard.render.com](https://dashboard.render.com) → **New** → **Web Service**
@@ -55,8 +86,6 @@ This serves the built frontend and API from one process on `PORT` (default `3001
    - `OPENAI_API_KEY` = your secret key (required)
    - Optional: `OPENAI_IMAGE_MODEL=gpt-image-1`
 6. Create Web Service and wait for deploy
-
-Or use the included `render.yaml`: **New** → **Blueprint** → select the repo.
 
 Your app URL will look like `https://modellr.onrender.com`.
 

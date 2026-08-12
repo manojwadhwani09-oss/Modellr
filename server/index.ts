@@ -60,8 +60,8 @@ app.get(/^(?!\/api).*/, (req, res, next) => {
   })
 })
 
-app.listen(port, () => {
-  console.log(`Modellr API listening on http://localhost:${port}`)
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Modellr API listening on http://0.0.0.0:${port}`)
   if (!process.env.OPENAI_API_KEY?.trim()) {
     console.warn('Warning: OPENAI_API_KEY is not set')
   }
