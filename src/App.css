@@ -348,6 +348,12 @@
   padding: 2rem 1rem;
 }
 
+.download-hint {
+  justify-self: center;
+  margin: 0.35rem 0 0;
+  max-width: 22rem;
+}
+
 .download-btn {
   justify-self: center;
   display: inline-flex;
@@ -358,10 +364,13 @@
   padding: 0.7rem 1.1rem;
   border-radius: 10px;
   border: 1px solid rgba(214, 196, 161, 0.45);
+  background: transparent;
   color: var(--accent);
   text-decoration: none;
+  font: inherit;
   font-size: 0.92rem;
   font-weight: 600;
+  cursor: pointer;
 }
 
 .download-btn:hover {

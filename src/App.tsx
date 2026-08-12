@@ -6,6 +6,40 @@ type Status = 'idle' | 'loading' | 'done' | 'error'
 type BackgroundMode = 'photo' | 'prompt'
 
 const MAX_BYTES = 20 * 1024 * 1024
+const DOWNLOAD_NAME = 'modellr-model-photo.png'
+
+function dataUrlToFile(dataUrl: string, filename: string): File {
+  const [header, base64] = dataUrl.split(',')
+  const mime = header.match(/data:(.*?);/)?.[1] || 'image/png'
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new File([bytes], filename, { type: mime })
+}
+
+async function saveImageToDevice(dataUrl: string) {
+  const file = dataUrlToFile(dataUrl, DOWNLOAD_NAME)
+
+  // Phones: Share sheet lets users save to Photos / Files (HTML download is unreliable).
+  if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare?.({ files: [file] })) {
+    await navigator.share({ files: [file], title: 'Modellr photo' })
+    return
+  }
+
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = DOWNLOAD_NAME
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  } finally {
+    // Delay revoke so Safari can finish reading the blob.
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500)
+  }
+}
 
 export default function App() {
   const clothInputRef = useRef<HTMLInputElement>(null)
@@ -117,6 +151,21 @@ export default function App() {
     (backgroundMode === 'photo' && Boolean(backgroundDataUrl)) ||
     (backgroundMode === 'prompt' && Boolean(backgroundPrompt.trim()))
   const canGenerate = Boolean(clothDataUrl) && backgroundReady && !busy
+
+  async function handleDownload() {
+    if (!resultUrl) return
+    try {
+      await saveImageToDevice(resultUrl)
+    } catch (err) {
+      // User cancelled the share sheet — ignore.
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not save the photo. Long-press the image and choose Save Image.',
+      )
+    }
+  }
 
   return (
     <div className="page">
@@ -300,9 +349,12 @@ export default function App() {
             {resultUrl && (
               <>
                 <img src={resultUrl} alt="Generated model wearing the garment" />
-                <a className="download-btn" href={resultUrl} download="modellr-model-photo.png">
-                  Download photo
-                </a>
+                <p className="helper download-hint">
+                  On phones: tap Save / Share, or long-press the image → Save Image.
+                </p>
+                <button type="button" className="download-btn" onClick={() => void handleDownload()}>
+                  Save / share photo
+                </button>
               </>
             )}
             {status !== 'loading' && !resultUrl && (
