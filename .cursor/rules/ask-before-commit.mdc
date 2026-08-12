@@ -1,0 +1,10 @@
+---
+description: Always ask before creating git commits
+alwaysApply: true
+---
+
+# Git commits
+
+- Never create a git commit unless the user explicitly asks to commit in that message.
+- If commit seems useful or they say something ambiguous like "save" / "done", ask first: "Do you want me to commit these changes?"
+- Do not stage, commit, or push proactively.
